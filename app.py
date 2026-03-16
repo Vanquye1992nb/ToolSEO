@@ -3,8 +3,8 @@ import google.generativeai as genai
 import json
 import re
 
-# --- GIAO DI?N CHU?N 5 ?NH ---
-st.set_page_config(page_title="SEO Youtube Van Th? v3", layout="centered")
+# --- CẤU HÌNH GIAO DIỆN (CHUẨN 5 ẢNH MẪU) ---
+st.set_page_config(page_title="Trợ Lý SEO Youtube Văn Thế", layout="centered")
 
 st.markdown("""
     <style>
@@ -12,57 +12,67 @@ st.markdown("""
     label { color: #ffffff !important; font-weight: bold !important; }
     .card { background-color: #363d4a; padding: 25px; border-radius: 12px; border: 1px solid #4a5568; margin-bottom: 20px; }
     .title-gold { color: #f1c40f; font-size: 28px; font-weight: 800; text-align: center; }
-    .stButton>button { background-color: #2563eb !important; color: white !important; width: 100%; border-radius: 8px; font-weight: bold; }
+    .stButton>button { background-color: #2563eb !important; color: white !important; width: 100%; border-radius: 8px; font-weight: bold; border: none; }
     .tag-chip { background-color: #4a5568; color: #e2e8f0; padding: 5px 12px; border-radius: 15px; display: inline-block; margin: 4px; border: 1px solid #718096; }
     </style>
     """, unsafe_allow_html=True)
 
-def call_gemini_3(api_key, keyword):
+# Hàm thông minh để tránh lỗi 404
+def get_working_model(api_key):
     try:
         genai.configure(api_key=api_key)
-        # Ép s? d?ng Gemini 3 Flash theo c?p nh?t tháng 3/2026 c?a b?n
-        model = genai.GenerativeModel('gemini-3-flash')
-        prompt = f"Phân tích Youtube '{keyword}'. Tr? v? JSON: 'titles' (10), 'tags' (25)."
-        response = model.generate_content(prompt)
-        match = re.search(r'\{.*\}', response.text, re.DOTALL)
-        return json.loads(match.group()) if match else None
-    except Exception as e:
-        return str(e)
+        # Lấy danh sách model thực tế mà API Key của bạn được phép dùng
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Thử các model theo thứ tự ưu tiên
+        for model_name in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro']:
+            if model_name in available_models:
+                return model_name
+        return available_models[0] if available_models else None
+    except:
+        return None
 
 if 'step' not in st.session_state: st.session_state.step = 1
 
 with st.sidebar:
-    st.header("?? Cài d?t")
-    api_key = st.text_input("Nh?p API Key:", type="password")
+    st.header("⚙️ Cấu hình")
+    api_key = st.text_input("Nhập API Key:", type="password")
 
 if st.session_state.step == 1:
     st.markdown('<p class="title-gold">Chuyên Gia SEO Video</p>', unsafe_allow_html=True)
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        kw = st.text_input("T? khóa chính", placeholder="Ví d?: Làm sao d? giàu")
-        if st.button("?? T?O N?I DUNG T?I UU"):
+        kw = st.text_input("Từ khóa chính (Bắt buộc)", placeholder="Ví dụ: Cách làm giàu")
+        if st.button("🚀 TẠO NỘI DUNG TỐI ƯU"):
             if kw and api_key:
-                res = call_gemini_3(api_key, kw)
-                if isinstance(res, dict):
-                    st.session_state.data = res
-                    st.session_state.current_kw = kw
-                    st.session_state.step = 2
-                    st.rerun()
-                else: st.error(f"L?i: {res}")
+                selected_model = get_working_model(api_key)
+                if selected_model:
+                    try:
+                        model = genai.GenerativeModel(selected_model)
+                        response = model.generate_content(f"SEO Youtube cho từ khóa '{kw}'. Trả về JSON: 'titles' (list 10), 'tags' (list 25).")
+                        match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                        if match:
+                            st.session_state.data = json.loads(match.group())
+                            st.session_state.current_kw = kw
+                            st.session_state.step = 2
+                            st.rerun()
+                    except Exception as e: st.error(f"Lỗi gọi AI: {e}")
+                else: st.error("API Key này không có quyền truy cập model nào!")
+            else: st.warning("Hãy nhập đủ thông tin!")
         st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.step >= 2:
-    st.markdown(f"### K?T QU?: {st.session_state.current_kw.upper()}")
+    st.markdown(f"### KẾT QUẢ SEO: {st.session_state.current_kw.upper()}")
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("?? **10 TIÊU Ð? H?P D?N**")
-    for t in st.session_state.data.get('titles', []): st.write(f"? {t}")
+    st.write("🏅 **10 TIÊU ĐỀ HẤP DẪN**")
+    for t in st.session_state.data.get('titles', []): st.write(f"✅ {t}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("?? **25 TH? TAGS SEO**")
+    st.write("📊 **25 THẺ TAGS SEO**")
     tags = "".join([f'<span class="tag-chip">{t}</span>' for t in st.session_state.data.get('tags', [])])
     st.markdown(tags, unsafe_allow_html=True)
     
-    if st.button("?? Quay l?i"):
+    if st.button("🔄 Quay lại"):
         st.session_state.step = 1
         st.rerun()
